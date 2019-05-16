@@ -142,6 +142,38 @@ def process_directory(directory):
 
     return base_uri, uniques
 
+def data_in_directory(directory):
+    """Given a `SyncForScience` directory within a patient directory, collects
+    the data entries by resourceType
+    """
+    logging.debug('Processing {}'.format(directory))
+
+    person = {}
+    base_uri = None
+    for type_, path, resource_base_uri in find_resource_files(directory):
+        if not base_uri:
+            base_uri = resource_base_uri
+        try:
+            with open(path) as f:
+                data = json.load(f)
+                logging.debug(
+                    'Parsed {} as JSON'.format(path)
+                )
+        except ValueError:
+            logging.debug(
+                '{} could not be parsed as JSON'.format(path)
+            )
+            continue  # any non-JSON files will be ignored
+        if 'entry' not in data:
+            data['entry'] = list()  # no data
+
+        if not type_ in person.keys():
+            person[type_] = []
+        for entry in data['entry']:
+            person[type_].append(entry['resource'])
+
+    return base_uri, person
+
 
 def main():
     """Find patient S4S directories and compute statistics on the number of
