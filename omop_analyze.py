@@ -5,11 +5,13 @@ import json
 import logging
 import argparse
 
-important_column = {
+code_column = {
     'condition.csv': 'condition_concept_id',
     'observation_1.csv': 'observation_concept_id',
     'observation_2.csv': 'observation_concept_id',
+    'observation.csv': 'observation_concept_id',
     'procedure.csv': 'procedure_concept_id',
+    'drug_summary.csv': 'drug_concept_id',
 }
 
 def parse_arguments():
@@ -44,11 +46,14 @@ def id_sets_for_interesting_columns(csvs):
     ids = []
     for filename, table in [csv_to_dicts(csv) for csv in csvs]:
         ids.append({
-            important_column[filename]: ids_for_column(table, important_column[filename])
+            code_column[filename]: ids_for_column(table, code_column[filename])
         })
     return ids
 
-def data_dump(csvs):
+def data_dump(path="C:\\Users\\claflid\\Documents\\s4s_data\\omop\\20190326", extension='csv'):
+    os.chdir(path)
+    csvs = [i for i in glob.glob('*.{}'.format(extension))]
+    print(csvs)
     data = []
     for file in csvs:
         dicts = csv_to_dicts(file)
