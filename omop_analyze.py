@@ -12,6 +12,8 @@ code_column = {
     'observation.csv': 'observation_concept_id',
     'procedure.csv': 'procedure_concept_id',
     'drug_summary.csv': 'drug_concept_id',
+    'drug.csv': 'drug_concept_id',
+    'measurement.csv': 'measurement_concept_id',
 }
 
 def parse_arguments():
@@ -50,7 +52,7 @@ def id_sets_for_interesting_columns(csvs):
         })
     return ids
 
-def data_dump(path="C:\\Users\\claflid\\Documents\\s4s_data\\omop\\20190326", extension='csv'):
+def data_dump(path=".\\omop\\20190326", extension='csv'):
     os.chdir(path)
     csvs = [i for i in glob.glob('*.{}'.format(extension))]
     print(csvs)
@@ -60,10 +62,10 @@ def data_dump(path="C:\\Users\\claflid\\Documents\\s4s_data\\omop\\20190326", ex
         data.append((file, dicts))
     return data
 
-def parse_omop(path="C:\\Users\\claflid\\Documents\\s4s_data\\omop\\20190326", extension='csv'):
+def parse_omop(path=".\\omop\\20190326", extension='csv'):
     os.chdir(path)
     csvs = [i for i in glob.glob('*.{}'.format(extension))]
-    print(csvs)
+    # print(csvs)
     patients = {}
     for filename, table in [csv_to_dicts(csv) for csv in csvs]:
         for interaction in table:
@@ -74,7 +76,8 @@ def parse_omop(path="C:\\Users\\claflid\\Documents\\s4s_data\\omop\\20190326", e
                     patients[interaction['person_id']][filename] = [interaction, ]
             else:
                 patients[interaction['person_id']] = {filename:[interaction, ]}
-    return patients
+    print("Got {} omop participants".format(len(patients.keys())))
+    return patients, csvs
 
 def main():
     """Find OMOP csvs and output json

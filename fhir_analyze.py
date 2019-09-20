@@ -174,6 +174,16 @@ def data_in_directory(directory):
 
     return base_uri, person
 
+def traverse_directory(path=".\\fhir\\Participant"):
+    s4s_people = {}
+    search_path = os.path.join(path, '*', 'SyncForScience')
+    for directory in glob.glob(search_path):
+        base_uri, dir_counts = data_in_directory(directory)
+        person_id = directory.split('\\')[-2][1:]
+        s4s_people[person_id] = dir_counts
+    print("got {} s4s participants".format(len(s4s_people.keys())))
+    return s4s_people
+
 
 def main():
     """Find patient S4S directories and compute statistics on the number of
