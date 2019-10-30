@@ -276,3 +276,37 @@ def omop_system_counts(omop_people):
                     systems[coding[0][0]] += 1
 
     return systems
+
+def most_common_synonym(coding_sets):
+    synonym_sets = []
+    most_common = Counter()
+    for coding_set in coding_sets:
+        found = False
+        for coding in coding_set:
+            most_common[coding] += 1
+            new_synonym_sets = []
+            new_synonym_set = set()
+            for synonym_set in synonym_sets:
+                if coding in synonym_set:
+                    if found:
+                        new_synonym_set.update(synonym_set)
+                    if not found:
+                        new_synonym_set = synonym_set.update(coding_set)
+                        found = True
+                else:
+                    new_synonym_sets.append(synonym_set)
+
+        if found:
+            new_synonym_sets.append(new_synonym_set)
+        else:
+            new_synonym_sets.append(coding_set)
+        synonym_sets = new_synonym_sets
+
+    #now generate a map between the coding to the most common synonym
+    most_common_synonym = {}
+    for synonym_set in synonym_sets:
+        most_seen = max(list(synonym_set), key=lambda synonym:  most_common[synonym])
+        for synonym in synonym_set:
+            most_common_synonym[synonym] = most_seen
+
+    return most_common_synonym
