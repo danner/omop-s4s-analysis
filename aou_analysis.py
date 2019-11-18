@@ -239,6 +239,7 @@ def code_system_counts(fhir_people):
 def coding_counts(fhir_people):
     # Count of codings for each data category.
     coding_paths = {}
+    coding_sets = []
     display_codes = {}
     for person, documents in fhir_people.items():
         for document, data in documents.items():
@@ -247,19 +248,42 @@ def coding_counts(fhir_people):
             for entry in data:
                 fetched = fetch_at_path(entry, path_for_resource(entry))
                 if fetched:
+                    coding_set = set()
                     for f in fetched:
                         try:
-                            coding_paths[document][f.get('system', 'None')+' '+f.get('code', 'None')] += 1
-                            display_codes[f.get('system', 'None')+' '+f.get('code', 'None')] = {
+                            coding = {
                                 'system': f.get('system', 'None'),
                                 'code': f.get('code', 'None'),
                                 'display': f.get('display', 'None')
                             }
                         except AttributeError:
-                            pass
+                            #for some reason there are codings that are lists
+                            f = f[0]
+                            coding = {
+                                'system': f.get('system', 'None'),
+                                'code': f.get('code', 'None'),
+                                'display': f.get('display', 'None')
+                            }
+                        code_hash = coding['system']+' '+coding['code']
+                        coding_paths[document][code_hash] += 1
+                        coding_set.add(code_hash)
+                        display_codes[code_hash] = coding
+                    coding_sets.append(coding_set)
+    #work out the most common synonyms
+    most_common_coding = most_common_synonym(coding_sets)
+    print("******", most_common_coding)
+    print("*******", coding_paths)
+    #combine the counts of synonyms
+    common_counter = {}
+    for category, counter in coding_paths.items():
+        if category not in common_counter:
+            common_counter[category] = Counter()
+        for coding, count in counter.most_common():
+            common_counter[category][most_common_coding[coding]] += count
+
     #now make a table with display values
     coding_table = {}
-    for category, counter in coding_paths.items():
+    for category, counter in common_counter.items():
         coding_table[category] = [{**display_codes[coding], **{'count': count}} for coding, count in counter.most_common()]
     return coding_table
 
@@ -287,15 +311,17 @@ def most_common_synonym(coding_sets):
             new_synonym_sets = []
             new_synonym_set = set()
             for synonym_set in synonym_sets:
-                if coding in synonym_set:
-                    if found:
-                        new_synonym_set.update(synonym_set)
-                    if not found:
-                        new_synonym_set = synonym_set.update(coding_set)
-                        found = True
-                else:
-                    new_synonym_sets.append(synonym_set)
-
+                try:
+                    if coding in synonym_set:
+                        if found:
+                            new_synonym_set.update(synonym_set)
+                        if not found:
+                            new_synonym_set = synonym_set.union(coding_set)
+                            found = True
+                    else:
+                        new_synonym_sets.append(synonym_set)
+                except TypeError as e:
+                    print(e, coding, synonym_set)
         if found:
             new_synonym_sets.append(new_synonym_set)
         else:
@@ -305,8 +331,9 @@ def most_common_synonym(coding_sets):
     #now generate a map between the coding to the most common synonym
     most_common_synonym = {}
     for synonym_set in synonym_sets:
-        most_seen = max(list(synonym_set), key=lambda synonym:  most_common[synonym])
-        for synonym in synonym_set:
-            most_common_synonym[synonym] = most_seen
+        if len(synonym_set):
+            most_seen = max(list(synonym_set), key=lambda synonym:  most_common[synonym])
+            for synonym in synonym_set:
+                most_common_synonym[synonym] = most_seen
 
     return most_common_synonym
