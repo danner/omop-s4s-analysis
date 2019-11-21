@@ -10,7 +10,6 @@ from functools import reduce
 import omop_analyze
 import fhir_analyze
 
-
 # Helper functions:
 def configure_tables():
     pd.set_option('max_rows', 999)
@@ -30,7 +29,6 @@ def path_for_resource(resource):
         'Condition': ['code', 'coding'], #code, coding
         'DocumentReference': ['class', 'coding'],
         'Procedure': ['code', 'coding'],
-
     }
     return code_paths[resource_type]
 
@@ -47,6 +45,7 @@ def fetch_at_path(resource, path):
 
 class Node:
     def __init__(self, parent=None):
+        self.type = None
         self.count = Counter()
         self.children = {}
         self.parent_node = parent
@@ -64,30 +63,51 @@ class Node:
 
     def __repr__(self):
         children = self.children
-        return "Node: {count}{children}".format(**{
-            "count": dict(self.count),
-            "children": self.print_children(children),
-        })
+        if self.type is type([]):
+            return "{type} node: top values: {count}{children}".format(**{
+                "type": self.type,
+                "count": self.count.most_common(5),
+                "children": self.print_children(children),
+            })
+        elif self.type is type({}):
+            return "{type} node: {children}".format(**{
+                "type": self.type,
+                "children": self.print_children(children),
+            })
+        elif self.type is type(1) or type("str"):
+            return "{type} node: top values: {count}".format(**{
+                "type": self.type,
+                "count": self.count.most_common(),
+            })
+        else:
+            return "*****************{type} node: {count}{children}".format(**{
+                "type": self.type,
+                "self": self.__dict__,
+            })
 
     def __str__(self):
         children = self.children
         return "Node: {count}{children}".format(**{
-            "count": dict(self.count),
+            "type": self.type,
+            "count": self.count.most_common(5),
             "children": self.print_children(children),
         })
 
 def traverse(resource, node):
-    node.count[type(resource)] += 1
+    node.type = type(resource).__name__
     if isinstance(resource, dict):
         for k, v in resource.items():
             if k not in node.children:
                 node.children[k] = Node(parent=node)
             traverse(v, node.children[k])
     elif isinstance(resource, list):
-        for i, item in enumerate(resource):
-            if i not in node.children:
-                node.children[i] = Node(parent=node)
+        self.count[len(resource)] += 1
+        for item in resource:
+            if len(resource) not in node.children:
+                node.children[len(resource)] = Node(parent=node)
             traverse(item, node.children[i])
+    else:
+        self.count[resource] += 1
     return node
 
 CODE_COLUMNS = {
@@ -201,23 +221,53 @@ def convert_vocabulary(system):
 def omop_concept_to_coding(row, table):
     return tuple((omop_concept_vocabulary_id(row[column]), omop_source_concept_code(row[column])) for column in CODE_COLUMNS[table] if column in row.keys())
 
+def most_common_synonym(coding_sets):
+    synonym_sets = []
+    most_common = Counter()
+    for coding_set in coding_sets:
+        found = False
+        new_synonym_sets = []
+        new_synonym_set = set()
+        for coding in coding_set:
+            most_common[coding] += 1
+            for synonym_set in synonym_sets:
+                try:
+                    if coding in synonym_set:
+                        if found:
+                            new_synonym_set.update(synonym_set)
+                        if not found:
+                            new_synonym_set = synonym_set.union(coding_set)
+                            found = True
+                    else:
+                        new_synonym_sets.append(synonym_set)
+                except TypeError as e:
+                    print(e, coding, synonym_set)
+
+        if found:
+            new_synonym_sets.append(new_synonym_set)
+        else:
+            new_synonym_sets.append(coding_set)
+        synonym_sets = new_synonym_sets
+
+    #now generate a map between the coding to the most common synonym
+    most_common_synonym = {}
+    for synonym_set in synonym_sets:
+        if len(synonym_set):
+            most_seen = max(list(synonym_set), key=lambda synonym:  most_common[synonym])
+            for synonym in synonym_set:
+                most_common_synonym[synonym] = most_seen
+        else:
+            print("empty synonym set++")
+
+    return most_common_synonym
 
 CONCEPT_TABLES = init_omop_concepts()
 
-# Report Functions
+# Report Functions - FHIR
 def fhir_plot_category_counts(fhir_people):
     s4s_datatype_totals = {person:{title:len(items) for (title, items) in datatype.items()} for (person, datatype) in fhir_people.items()}
     s4s_df = pd.DataFrame(s4s_datatype_totals).transpose()
     return s4s_df.plot(kind='box', figsize=(20,6), logy=True)
-
-def omop_plot_category_counts(omop_people, categories):
-    omop_data_types_per_person = {
-        data_type: [
-            len(person[data_type]) if data_type in person.keys() else 0 for person in omop_people.values()
-        ] for data_type in categories
-    }
-    omop_df_types = pd.DataFrame(omop_data_types_per_person, index=omop_people.values())
-    return omop_df_types.boxplot(figsize=(12,6), showfliers=False)
 
 def code_system_counts(fhir_people):
     # Count of code *systems* for each data category. E.g., fraction of SNOMED vs LOINC vs Other codes found in Conditions.
@@ -265,14 +315,14 @@ def coding_counts(fhir_people):
                                 'display': f.get('display', 'None')
                             }
                         code_hash = coding['system']+' '+coding['code']
-                        coding_paths[document][code_hash] += 1
+                        if f == fetched[0]:
+                            #maybe I should only add the first one, because we're using synonyms.
+                            coding_paths[document][code_hash] += 1
                         coding_set.add(code_hash)
                         display_codes[code_hash] = coding
                     coding_sets.append(coding_set)
     #work out the most common synonyms
     most_common_coding = most_common_synonym(coding_sets)
-    print("******", most_common_coding)
-    print("*******", coding_paths)
     #combine the counts of synonyms
     common_counter = {}
     for category, counter in coding_paths.items():
@@ -287,6 +337,17 @@ def coding_counts(fhir_people):
         coding_table[category] = [{**display_codes[coding], **{'count': count}} for coding, count in counter.most_common()]
     return coding_table
 
+# Report Functions - OMOP
+
+def omop_plot_category_counts(omop_people, categories):
+    omop_data_types_per_person = {
+        data_type: [
+            len(person[data_type]) if data_type in person.keys() else 0 for person in omop_people.values()
+        ] for data_type in categories
+    }
+    omop_df_types = pd.DataFrame(omop_data_types_per_person, index=omop_people.values())
+    return omop_df_types.boxplot(figsize=(12,6), showfliers=False)
+
 def omop_system_counts(omop_people):
     # Count of standardized code *systems* for each OMOP data type. E.g., fraction of SNOMED vs LOINC vs Other codes found in condition_concept_id.
     systems = Counter()
@@ -300,40 +361,3 @@ def omop_system_counts(omop_people):
                     systems[coding[0][0]] += 1
 
     return systems
-
-def most_common_synonym(coding_sets):
-    synonym_sets = []
-    most_common = Counter()
-    for coding_set in coding_sets:
-        found = False
-        for coding in coding_set:
-            most_common[coding] += 1
-            new_synonym_sets = []
-            new_synonym_set = set()
-            for synonym_set in synonym_sets:
-                try:
-                    if coding in synonym_set:
-                        if found:
-                            new_synonym_set.update(synonym_set)
-                        if not found:
-                            new_synonym_set = synonym_set.union(coding_set)
-                            found = True
-                    else:
-                        new_synonym_sets.append(synonym_set)
-                except TypeError as e:
-                    print(e, coding, synonym_set)
-        if found:
-            new_synonym_sets.append(new_synonym_set)
-        else:
-            new_synonym_sets.append(coding_set)
-        synonym_sets = new_synonym_sets
-
-    #now generate a map between the coding to the most common synonym
-    most_common_synonym = {}
-    for synonym_set in synonym_sets:
-        if len(synonym_set):
-            most_seen = max(list(synonym_set), key=lambda synonym:  most_common[synonym])
-            for synonym in synonym_set:
-                most_common_synonym[synonym] = most_seen
-
-    return most_common_synonym
