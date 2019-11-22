@@ -1,6 +1,7 @@
 import os
 import glob
 import csv
+import uuid
 import pprint as pp
 from collections import Counter, defaultdict
 import pandas as pd
@@ -222,36 +223,63 @@ def omop_concept_to_coding(row, table):
     return tuple((omop_concept_vocabulary_id(row[column]), omop_source_concept_code(row[column])) for column in CODE_COLUMNS[table] if column in row.keys())
 
 def most_common_synonym(coding_sets):
-    synonym_sets = []
+    coding2hash = {}
+    hash2set = {}
     most_common = Counter()
-    for coding_set in coding_sets:
-        found = False
-        new_synonym_sets = []
-        new_synonym_set = set()
+    for i, coding_set in enumerate(coding_sets):
+        print("set", i, "of ", len(coding_sets))
         for coding in coding_set:
             most_common[coding] += 1
-            for synonym_set in synonym_sets:
+        if len(coding_set) < 2:
+            continue
+        current_hash = None
+        for coding in coding_set:
+            #first off, we're looking if any of these codings already exist.
+            try:
+                current_hash = coding2hash[coding]
+                break
+            except KeyError:
+                # this coding doesn't exist as a synonym yet.
+                # on to the next.
+                print(coding, "wasn't in coding2hash")
+                continue
+        #once we're done looking at all the codings in the coding set
+        #decide what to do.
+        if current_hash:
+            combine_these = set()
+            hash2set[current_hash].update(coding_set)
+            for coding in coding_set:
                 try:
-                    if coding in synonym_set:
-                        if found:
-                            new_synonym_set.update(synonym_set)
-                        if not found:
-                            new_synonym_set = synonym_set.union(coding_set)
-                            found = True
-                    else:
-                        new_synonym_sets.append(synonym_set)
-                except TypeError as e:
-                    print(e, coding, synonym_set)
-
-        if found:
-            new_synonym_sets.append(new_synonym_set)
+                    if coding2hash[coding] != current_hash:
+                        # this coding belongs to a different set.
+                        # add that set to the current set
+                        combine_these.update(hash2set[coding2hash[coding]])
+                except KeyError:
+                    # why doesn't this coding exist in coding2hash?
+                    print(coding, "wasn't found in coding2hash?")
+            if len(combine_these):
+                # to combine, we grab each hash from codings,
+                hashes = set()
+                for coding in combine_these:
+                    hashes.add(coding2hash[coding])
+                    # update the coding2hash,
+                    coding2hash[coding] = current_hash
+                # then run through the hashes, add them together
+                for synonym_hash in hashes:
+                    # delete them from the sets, and append them to the current_hash
+                    try:
+                        hash2set[current_hash].update(hash2set.pop(synonym_hash))
+                    except KeyError as e:
+                        print(combine_these, hash2set, e)
         else:
-            new_synonym_sets.append(coding_set)
-        synonym_sets = new_synonym_sets
-
-    #now generate a map between the coding to the most common synonym
+            #new set! easy peasy.
+            new_hash = uuid.uuid4()
+            hash2set[new_hash] = coding_set
+            coding2hash.update({coding:new_hash for coding in coding_set})
+    # all synonyms are now combined.
+    print("now generating mapping between coding and most common synonym")
     most_common_synonym = {}
-    for synonym_set in synonym_sets:
+    for synonym_set in hash2set.values():
         if len(synonym_set):
             most_seen = max(list(synonym_set), key=lambda synonym:  most_common[synonym])
             for synonym in synonym_set:
@@ -289,12 +317,13 @@ def code_system_counts(fhir_people):
 def coding_counts(fhir_people):
     # Count of codings for each data category.
     coding_paths = {}
-    coding_sets = []
+    coding_sets = {}
     display_codes = {}
-    for person, documents in fhir_people.items():
+    for person, documents in list(fhir_people.items())[:1]:
         for document, data in documents.items():
             if document not in coding_paths:
                 coding_paths[document] = Counter()
+                coding_sets[document] = []
             for entry in data:
                 fetched = fetch_at_path(entry, path_for_resource(entry))
                 if fetched:
@@ -320,16 +349,18 @@ def coding_counts(fhir_people):
                             coding_paths[document][code_hash] += 1
                         coding_set.add(code_hash)
                         display_codes[code_hash] = coding
-                    coding_sets.append(coding_set)
+                    coding_sets[document].append(coding_set)
     #work out the most common synonyms
-    most_common_coding = most_common_synonym(coding_sets)
+    most_common_coding = {}
+    for document in coding_sets.keys():
+        most_common_coding[document] = most_common_synonym(coding_sets[document])
     #combine the counts of synonyms
     common_counter = {}
     for category, counter in coding_paths.items():
         if category not in common_counter:
             common_counter[category] = Counter()
         for coding, count in counter.most_common():
-            common_counter[category][most_common_coding[coding]] += count
+            common_counter[category][most_common_coding[category][coding]] += count
 
     #now make a table with display values
     coding_table = {}
