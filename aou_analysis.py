@@ -44,6 +44,13 @@ def fetch_at_path(resource, path):
         return None
     return reduce(walk, path, resource)
 
+STATUS_WHITELIST = [
+    'status',
+    'system',
+    'clinicalStatus',
+    'verificationStatus',
+    'resourceType',
+]
 class Node:
     def __init__(self, parent=None):
         self.type = None
@@ -62,6 +69,14 @@ class Node:
             "".join("{}{}: {}\n".format("   "*(self.depth+1), k, v) for k, v in self.children.items()),
             "{}}}".format("   "*(self.depth) if self.children else ""),
         ])
+    def full_path(self):
+        names = []
+        current_node = self
+        while current_node.parent_node:
+            if current_node.name:
+                names.append(current_node.name)
+            current_node = current_node.parent_node
+        return ".".join(reversed(names))
 
     def __repr__(self):
         if self.type == "list":
@@ -75,14 +90,12 @@ class Node:
                 "type": self.type,
                 "children": self.print_children(),
             })
-        elif self.type == "str" or self.type == "int":
+        elif self.type in ["str", "int", "float", "bool"]:
             count = str(sum(self.count.values()))
-            if self.name in [
-                'status',
-                'system',
-                'clinicalStatus',
-                'verificationStatus',
-            ]:
+            if any([self.name in STATUS_WHITELIST,
+                    self.type == 'bool',
+                    self.name == "url" and "extension.url" in self.full_path(),
+                ]):
                 count += " values: {statuses}".format(**{
                     "statuses": "".join("\n{}{}: {}".format(
                         "   "*(self.depth+1), k, v
@@ -93,8 +106,8 @@ class Node:
                 "count": count,
             })
         else:
-            return "<node {self}>".format(**{
-                "self": self.__dict__,
+            return "<{type} node  needs investigation>".format(**{
+                "type": self.type,
             })
 
     def __str__(self):
