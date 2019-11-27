@@ -44,11 +44,10 @@ def fetch_at_path(resource, path):
         return None
     return reduce(walk, path, resource)
 
-
-from collections import Counter, defaultdict
 class Node:
     def __init__(self, parent=None):
         self.type = None
+        self.name = None
         self.count = Counter()
         self.children = {}
         self.parent_node = parent
@@ -59,43 +58,56 @@ class Node:
 
     def print_children(self):
         return "".join([
-            " Children: {{{}".format("\n" if self.children else ""),
-            "".join("{}{}: {}\n".format("   "*self.depth, k, v) for k, v in self.children.items()),
-            "{}}}".format("   "*(self.depth-1) if self.children else ""),
+            " children: {{{}".format("\n" if self.children else ""),
+            "".join("{}{}: {}\n".format("   "*(self.depth+1), k, v) for k, v in self.children.items()),
+            "{}}}".format("   "*(self.depth) if self.children else ""),
         ])
 
     def __repr__(self):
         if self.type == "list":
-            return "{type} node: top values: {count}{children}".format(**{
+            return "<{type} top values: {count}{children}>".format(**{
                 "type": self.type,
                 "count": self.count.most_common(5),
                 "children": self.print_children(),
             })
         elif self.type == "dict":
-            return "{type} node> {children}".format(**{
+            return "<{type}{children}>".format(**{
                 "type": self.type,
                 "children": self.print_children(),
             })
         elif self.type == "str" or self.type == "int":
-            return "{type} node> total count: {count}".format(**{
+            count = str(sum(self.count.values()))
+            if self.name in [
+                'status',
+                'system',
+                'clinicalStatus',
+                'verificationStatus',
+            ]:
+                count += " values: {statuses}".format(**{
+                    "statuses": "".join("\n{}{}: {}".format(
+                        "   "*(self.depth+1), k, v
+                    ) for k, v in self.count.most_common()),
+                })
+            return "<{type} total: {count}>".format(**{
                 "type": self.type,
-                "count": sum(self.count.values()),
+                "count": count,
             })
         else:
-            return "{type} node".format(**{
-                "type": self.type,
+            return "<node {self}>".format(**{
+                "self": self.__dict__,
             })
 
     def __str__(self):
         return self.__repr__()
 
-def traverse(resource, node):
+def traverse(resource, node, name=None):
     node.type = type(resource).__name__
+    node.name = name
     if isinstance(resource, dict):
         for k, v in resource.items():
             if k not in node.children:
                 node.children[k] = Node(parent=node)
-            traverse(v, node.children[k])
+            traverse(v, node.children[k], k)
     elif isinstance(resource, list):
         node.count[str(len(resource))] += 1
         for item in resource:
