@@ -79,6 +79,28 @@ class Node:
             current_node = current_node.parent_node
         return ".".join(reversed(names))
 
+    def convert_to_dict(self):
+        conversion = {}
+        conversion['type'] = self.type
+        conversion['name'] = self.name
+        conversion['depth'] = self.depth
+        if self.type == "list":
+            conversion['list_lengths'] = self.count.most_common()
+        elif self.type in ["str", "int", "float", "bool"]:
+            conversion['count'] = sum(self.count.values())
+            if any([self.name in STATUS_WHITELIST,
+                    self.type == 'bool',
+                    self.name == "url" and "extension.url" in self.full_path(),
+                ]):
+                conversion['top_values'] = {}
+                for k, v in self.count.most_common():
+                    conversion['top_values'][k] = v
+        if self.children:
+            conversion['children'] = []
+            for k in self.children:
+                conversion['children'].append(self.children[k].convert_to_dict())
+        return conversion
+
     def __repr__(self):
         if self.type == "list":
             return "<{type} top values: {count}{children}>".format(**{
