@@ -30,6 +30,7 @@ def path_for_resource(resource):
         'Condition': ['code', 'coding'], #code, coding
         'DocumentReference': ['class', 'coding'],
         'Procedure': ['code', 'coding'],
+        'Patient': ['code', 'coding'],
     }
     return code_paths[resource_type]
 

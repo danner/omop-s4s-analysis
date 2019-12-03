@@ -116,9 +116,9 @@ def process_directory(directory):
     for type_, path, resource_base_uri in find_resource_files(directory):
         if not base_uri:
             base_uri = resource_base_uri
-        if type_ == 'PATIENT_DEMOGRAPHICS':
-            logging.debug('Skipping {}'.format(path))
-            continue  # do nothing with patient demographics for now
+#         if type_ == 'PATIENT_DEMOGRAPHICS':
+#             logging.debug('Skipping {}'.format(path))
+#             continue  # do nothing with patient demographics for now
         try:
             with open(path) as f:
                 data = json.load(f)
@@ -164,11 +164,16 @@ def data_in_directory(directory):
                 '{} could not be parsed as JSON'.format(path)
             )
             continue  # any non-JSON files will be ignored
+
+        if not type_ in person:
+            person[type_] = []
         if 'entry' not in data:
+            if type_ == "PATIENT_DEMOGRAPHICS":
+                person[type_] = [data]
+#             else:
+#                 print("empty bundle of ", type_)
             data['entry'] = list()  # no data
 
-        if not type_ in person.keys():
-            person[type_] = []
         for entry in data['entry']:
             person[type_].append(entry['resource'])
 
