@@ -177,36 +177,23 @@ def init_omop_concepts():
     cpt4_df = pd.DataFrame(concept_cpt4)
     concept_aouppi = csv_to_dicts('CONCEPT_AOUPPI.csv')[1]
     aouppi_df = pd.DataFrame(concept_aouppi)
-    concept_df.set_index(['concept_id',], inplace=True)
-    cpt4_df.set_index(['concept_id',], inplace=True)
-    aouppi_df.set_index(['concept_id',], inplace=True)
+
     vocab_df.set_index(['vocabulary_id',], inplace=True)
 
     CONCEPT_TABLES = [concept_df, cpt4_df, aouppi_df]
-    return CONCEPT_TABLES
-
-#quick and dirty caching
-def memoize(f):
-    memo = {}
-    def helper(x):
-        if x not in memo:
-            memo[x] = f(x)
-        return memo[x]
-    return helper
+    merged_concept_df = concept_df.append([cpt4_df, aouppi_df])
+    merged_concept_df.set_index(['concept_id', 'concept_code', 'vocabulary_id',], inplace=True)
+    return merged_concept_df
 
 missing_concept_codes = set()
 
-@memoize
 def omop_concept_lookup(concept_id):
-    concept = None
-    for table in CONCEPT_TABLES:
-        try:
-            concept = table.loc[concept_id]
-            if not concept.empty:
-                break
-        except KeyError:
-            continue
-    return concept
+    try:
+        return concept_table.loc[str(int(float(concept_id)))]
+    except KeyError as e:
+        print("couldn't find concept id:", concept_id)
+        missing_concept_codes.add(concept_id)
+        return None
 
 def omop_source_concept_code(concept_id):
     concept = omop_concept_lookup(concept_id)
@@ -229,6 +216,20 @@ def omop_concept_name(concept_id):
         return concept.concept_name
     except AttributeError:
         return None
+
+def concept_code_query(df, system, code):
+    # need to find a better way to query this. maybe a join?
+    concept = None
+    try:
+        concept = df.query(
+            "vocabulary_id == '{}' and concept_code == '{}'".format(
+                system,
+                code,
+            )
+        )
+    except KeyError as e:
+        print(e)
+    return concept
 
 def convert_vocabulary(system):
     converter = {
@@ -259,7 +260,7 @@ def convert_vocabulary(system):
     try:
         return converter[system]
     except KeyError:
-        print(system)
+        print("found a missing system:", system)
         return system
 
 def omop_concept_to_coding(row, table):
@@ -327,7 +328,7 @@ def most_common_synonym(coding_sets):
     #print("made a synonym list of length ", len(most_common_synonym.keys()))
     return most_common_synonym
 
-CONCEPT_TABLES = init_omop_concepts()
+concept_table = init_omop_concepts()
 
 # Report Functions - FHIR
 def fhir_plot_category_counts(fhir_people):
@@ -408,7 +409,7 @@ def coding_counts(fhir_people):
     #now make a table with display values
     coding_table = {}
     for category, counter in common_counter.items():
-        coding_table[category] = [{**display_codes[coding], **{'count': count}} for coding, count in counter.most_common(50)]
+        coding_table[category] = [{**display_codes[coding], **{'count': count}} for coding, count in counter.most_common()]
     return coding_table
 
 # Report Functions - OMOP
@@ -435,3 +436,12 @@ def omop_system_counts(omop_people):
                     systems[coding[0][0]] += 1
 
     return systems
+
+def omop_coding_counts(omop_people):
+    codes = Counter()
+    for person, tables in omop_people.items():
+        for filename, incidents in tables.items():
+            for incident in incidents:
+                coding = omop_concept_to_coding(incident, filename)
+                print("coding: ", coding)
+    return codes
