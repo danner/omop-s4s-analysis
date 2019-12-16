@@ -188,17 +188,23 @@ def init_omop_concepts():
 missing_concept_codes = set()
 
 def omop_concept_lookup(concept_id):
+    concept = concept_id.split('.')[0]
+    if not concept or concept in missing_concept_codes:
+        return None
     try:
-        return concept_table.loc[str(int(float(concept_id)))]
+        return concept_table.loc[concept]
     except KeyError as e:
-        print("couldn't find concept id:", concept_id)
+        #print("couldn't find concept id:", concept)
         missing_concept_codes.add(concept_id)
+        return None
+    except ValueError as e:
+        print("what's this concept?", concept_id.__dict__)
         return None
 
 def omop_source_concept_code(concept_id):
     concept = omop_concept_lookup(concept_id)
     try:
-        return concept.concept_code
+        return concept.index.values[0][0]
     except AttributeError:
         missing_concept_codes.add(concept_id)
         return None
@@ -206,7 +212,7 @@ def omop_source_concept_code(concept_id):
 def omop_concept_vocabulary_id(concept_id):
     concept = omop_concept_lookup(concept_id)
     try:
-        return concept.vocabulary_id
+        return concept.index.values[0][1]
     except AttributeError:
         return None
 
@@ -264,7 +270,18 @@ def convert_vocabulary(system):
         return system
 
 def omop_concept_to_coding(row, table):
-    return tuple((omop_concept_vocabulary_id(row[column]), omop_source_concept_code(row[column])) for column in CODE_COLUMNS[table] if column in row.keys())
+    concepts = []
+    for column in CODE_COLUMNS[table]:
+        if column in row.keys():
+            concepts.append(omop_concept_lookup(row[column]))
+    try:
+        return tuple((
+            concept.index.values[0][1],
+            concept.index.values[0][0]
+        ) for concept in concepts)
+    except AttributeError as e:
+        #print("no concept for ", row, table)
+        return ('None', 'None')
 
 def most_common_synonym(coding_sets):
     coding2hash = {}
@@ -434,14 +451,15 @@ def omop_system_counts(omop_people):
                     systems['None'] += 1
                 else:
                     systems[coding[0][0]] += 1
-
     return systems
 
 def omop_coding_counts(omop_people):
-    codes = Counter()
+    codes = {}
     for person, tables in omop_people.items():
         for filename, incidents in tables.items():
+            if filename not in codes:
+                codes[filename] = Counter()
             for incident in incidents:
                 coding = omop_concept_to_coding(incident, filename)
-                print("coding: ", coding)
+                codes[filename][coding] += 1
     return codes
