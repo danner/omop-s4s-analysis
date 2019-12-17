@@ -17,6 +17,9 @@ def configure_tables():
     pd.set_option('max_colwidth', 120)
     pd.set_option('display.width', 150)
 
+def export_df(df, filename):
+    df.to_csv(path_or_buf=filename)
+
 def path_for_resource(resource):
     resource_type = resource['resourceType']
     code_paths = {
