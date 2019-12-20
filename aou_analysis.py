@@ -304,11 +304,20 @@ def omop_concept_to_coding(row, table):
         return tuple({
             'system': concept.index.values[0][1],
             'coding': concept.index.values[0][0],
-            'name': concept.concept_name,
+            'name': concept.concept_name.values[0],
         } for concept in concepts)
     except AttributeError as e:
         #print("no concept for ", row, table)
         return ({}, {})
+
+def compose_vocab_df(vocab):
+    vocab_df = pd.DataFrame(vocab).transpose()
+    vocab2_df = vocab_df.join(vocab_df[0].apply(pd.Series)['name'])
+    vocab2_df.rename(columns={'name': 'concept_name'}, inplace=True)
+    vocab3_df = vocab2_df.join(vocab_df[1].apply(pd.Series)['name'])
+    vocab3_df.rename(columns={'name': 'source_name'}, inplace=True)
+    vocab4_df = vocab3_df.drop(columns=[0,1])
+    return vocab4_df
 
 def most_common_synonym(coding_sets):
     coding2hash = {}
