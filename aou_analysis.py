@@ -190,6 +190,19 @@ def init_omop_concepts():
 
 missing_concept_codes = set()
 
+
+class Memoize:
+    def __init__(self, fn):
+        self.fn = fn
+        self.memo = {}
+
+    def __call__(self, *args):
+        if args not in self.memo:
+            self.memo[args] = self.fn(*args)
+        return self.memo[args]
+
+
+@Memoize
 def omop_concept_lookup(concept_id):
     concept = concept_id.split('.')[0]
     if not concept or concept in missing_concept_codes:
@@ -209,7 +222,6 @@ def omop_source_concept_code(concept_id):
     try:
         return concept.index.values[0][0]
     except AttributeError:
-        missing_concept_codes.add(concept_id)
         return None
 
 def omop_concept_vocabulary_id(concept_id):
@@ -272,19 +284,31 @@ def convert_vocabulary(system):
         print("found a missing system:", system)
         return system
 
-def omop_concept_to_coding(row, table):
+def omop_raw_coding(row, table):
     concepts = []
     for column in CODE_COLUMNS[table]:
         if column in row.keys():
+            concepts.append(row[column])
+        else:
+            concepts.append('None')
+    return " ".join(concepts)
+
+def omop_concept_to_coding(row, table):
+    concepts = []
+    for column in CODE_COLUMNS[table]:
+        try:
             concepts.append(omop_concept_lookup(row[column]))
+        except AttributeError:
+            concepts.append(None)
     try:
-        return tuple((
-            concept.index.values[0][1],
-            concept.index.values[0][0]
-        ) for concept in concepts)
+        return tuple({
+            'system': concept.index.values[0][1],
+            'coding': concept.index.values[0][0],
+            'name': concept.concept_name,
+        } for concept in concepts)
     except AttributeError as e:
         #print("no concept for ", row, table)
-        return ('None', 'None')
+        return ({}, {})
 
 def most_common_synonym(coding_sets):
     coding2hash = {}
@@ -354,7 +378,7 @@ concept_table = init_omop_concepts()
 def fhir_plot_category_counts(fhir_people):
     s4s_datatype_totals = {person:{title:len(items) for (title, items) in datatype.items()} for (person, datatype) in fhir_people.items()}
     s4s_df = pd.DataFrame(s4s_datatype_totals).transpose()
-    return s4s_df.plot(kind='box', figsize=(20,6), logy=True)
+    return s4s_df
 
 def code_system_counts(fhir_people):
     # Count of code *systems* for each data category. E.g., fraction of SNOMED vs LOINC vs Other codes found in Conditions.
@@ -441,28 +465,32 @@ def omop_plot_category_counts(omop_people, categories):
         ] for data_type in categories
     }
     omop_df_types = pd.DataFrame(omop_data_types_per_person, index=omop_people.values())
-    return omop_df_types.boxplot(figsize=(12,6), showfliers=False)
+    return omop_df_types
 
 def omop_system_counts(omop_people):
     # Count of standardized code *systems* for each OMOP data type. E.g., fraction of SNOMED vs LOINC vs Other codes found in condition_concept_id.
-    systems = Counter()
+    systems = {}
     for person, tables in omop_people.items():
         for filename, incidents in tables.items():
+            if not filename in systems:
+                systems[filename] = Counter()
             for incident in incidents:
-                coding = omop_concept_to_coding(incident, filename)
-                if not coding[0][0] or coding[0][0] == 'None':
-                    systems['None'] += 1
-                else:
-                    systems[coding[0][0]] += 1
+                coding = list(omop_concept_to_coding(incident, filename))
+                try:
+                    systems[filename][coding[0]['system']] += 1
+                except KeyError:
+                    systems[filename]['None'] += 1
     return systems
 
 def omop_coding_counts(omop_people):
     codes = {}
+    standardized_codings = {}
     for person, tables in omop_people.items():
         for filename, incidents in tables.items():
             if filename not in codes:
                 codes[filename] = Counter()
             for incident in incidents:
-                coding = omop_concept_to_coding(incident, filename)
+                coding = omop_raw_coding(incident, filename)
+                standardized_codings[coding] = list(omop_concept_to_coding(incident, filename))
                 codes[filename][coding] += 1
-    return codes
+    return codes, standardized_codings
