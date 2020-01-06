@@ -444,8 +444,18 @@ def coding_counts(fhir_people):
                     coding_sets[document].append(coding_set)
     #work out the most common synonyms
     most_common_coding = {}
+    synonym_sets = {}
     for document in coding_sets.keys():
         most_common_coding[document] = most_common_synonym(coding_sets[document])
+        synonym_sets[document] = {}
+        # once we've got a lookup dict, also create a mapping from
+        # the most common synonym to all its less popular codings.
+        for key, value in most_common_coding[document].items():
+            if value in synonym_sets[document]:
+                synonym_sets[document][value].append(key)
+            else:
+                synonym_sets[document][value]=[key]
+
     #combine the counts of synonyms
     common_counter = {}
     for category, counter in coding_paths.items():
@@ -463,7 +473,11 @@ def coding_counts(fhir_people):
     coding_table = {}
     for category, counter in common_counter.items():
         coding_table[category] = [{**display_codes[coding], **{'count': count}} for coding, count in counter.most_common()]
-    return coding_table
+    return {
+        'table': coding_table,
+        'synonyms': synonym_sets,
+        'display': display_codes,
+    }
 
 # Report Functions - OMOP
 
