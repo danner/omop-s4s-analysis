@@ -188,7 +188,35 @@ def init_omop_concepts():
     merged_concept_df.set_index(['concept_id', 'concept_code', 'vocabulary_id',], inplace=True)
     return merged_concept_df
 
+NO_DATA = 'Empty raw value'
+MISSING_CONCEPT = 'Missing concept'
+NO_MATCHING_CONCEPT = 'No standardized concept'
+NO_MATCHING_DISPLAY = 'No standardized display'
+PARSE_ERROR = 'Error parsing'
+
 missing_concept_codes = set()
+
+def get_fhir_standardized_concept(fhir_coding):
+    standardized_concept = concept_table.iloc[
+        concept_table.index.isin([fhir_coding['code']], level=1) &
+        concept_table.index.isin([
+            convert_vocabulary(fhir_coding['system'])],
+            level=2
+        )]
+    if len(standardized_concept) < 1:
+        return NO_MATCHING_CONCEPT
+    else:
+        return standardized_concept
+
+def get_fhir_standardized_concept_name(fhir_coding):
+    try:
+        concept = get_fhir_standardized_concept(fhir_coding)
+        return concept['concept_name'].values[0]
+    except IndexError:
+        return NO_MATCHING_DISPLAY
+    except TypeError:
+        if concept == NO_MATCHING_CONCEPT:
+            return NO_MATCHING_CONCEPT
 
 
 class Memoize:
@@ -201,42 +229,41 @@ class Memoize:
             self.memo[args] = self.fn(*args)
         return self.memo[args]
 
-
 @Memoize
 def omop_concept_lookup(concept_id):
     concept = concept_id.split('.')[0]
-    if not concept or concept in missing_concept_codes:
-        return None
+    if not concept:
+        return MISSING_CONCEPT
     try:
         return concept_table.loc[concept]
     except KeyError as e:
         #print("couldn't find concept id:", concept)
         missing_concept_codes.add(concept_id)
-        return None
+        return NO_MATCHING_CONCEPT
     except ValueError as e:
         print("what's this concept?", concept_id.__dict__)
-        return None
+        return PARSE_ERROR
 
 def omop_source_concept_code(concept_id):
     concept = omop_concept_lookup(concept_id)
     try:
         return concept.index.values[0][0]
     except AttributeError:
-        return None
+        return NO_MATCHING_CONCEPT
 
 def omop_concept_vocabulary_id(concept_id):
     concept = omop_concept_lookup(concept_id)
     try:
         return concept.index.values[0][1]
     except AttributeError:
-        return None
+        return NO_MATCHING_CONCEPT
 
 def omop_concept_name(concept_id):
     concept = omop_concept_lookup(concept_id)
     try:
         return concept.concept_name
     except AttributeError:
-        return None
+        return NO_MATCHING_CONCEPT
 
 def concept_code_query(df, system, code):
     # need to find a better way to query this. maybe a join?
@@ -299,7 +326,7 @@ def omop_concept_to_coding(row, table):
         try:
             concepts.append(omop_concept_lookup(row[column]))
         except AttributeError:
-            concepts.append(None)
+            concepts.append(NO_MATCHING_CONCEPT)
     try:
         return tuple({
             'system': concept.index.values[0][1],
@@ -423,18 +450,20 @@ def coding_counts(fhir_people):
                     for f in fetched:
                         try:
                             coding = {
-                                'system': f.get('system', 'None'),
-                                'code': f.get('code', 'None'),
-                                'display': f.get('display', 'None')
+                                'system': f.get('system', NO_DATA),
+                                'code': f.get('code', NO_DATA),
+                                'display': f.get('display', NO_DATA)
                             }
                         except AttributeError:
                             #for some reason there are codings that are lists
                             f = f[0]
                             coding = {
-                                'system': f.get('system', 'None'),
-                                'code': f.get('code', 'None'),
-                                'display': f.get('display', 'None')
+                                'system': f.get('system', NO_DATA),
+                                'code': f.get('code', NO_DATA),
+                                'display': f.get('display', NO_DATA)
                             }
+#                         if coding['display'] == NO_DATA:
+#                             coding['display'] = get_fhir_standardized_concept_name(coding)
                         code_hash = coding['system']+' '+coding['code']
                         if f == fetched[0]:
                             #maybe I should only add the first one, because we're using synonyms.
@@ -478,6 +507,14 @@ def coding_counts(fhir_people):
         'synonyms': synonym_sets,
         'display': display_codes,
     }
+
+def print_synonym_sets(synonyms, display_names):
+    for key, value in synonyms.items():
+        most_common = display_names[key]['display']
+        if most_common == 'None':
+            most_common = key
+        print(most_common, '=>', [display_names[v]['display'] for v in value])
+
 
 # Report Functions - OMOP
 
