@@ -17,6 +17,10 @@ def configure_tables():
     pd.set_option('max_colwidth', 120)
     pd.set_option('display.width', 150)
 
+def merge_multi(self, df, on):
+    return self.reset_index().join(df,on=on).set_index(self.index.names)
+pd.DataFrame.merge_multi = merge_multi
+
 def export_df(df, filename):
     df.to_csv(path_or_buf=filename)
 

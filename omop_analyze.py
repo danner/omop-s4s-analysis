@@ -53,30 +53,37 @@ def id_sets_for_interesting_columns(csvs):
     return ids
 
 def data_dump(path=".\\omop\\20190326", extension='csv'):
+    cwd = os.getcwd()
     os.chdir(path)
     csvs = [i for i in glob.glob('*.{}'.format(extension))]
     print(csvs)
     data = []
     for file in csvs:
         dicts = csv_to_dicts(file)
-        data.append((file, dicts))
+        data.append(dicts)
+    os.chdir(cwd)
     return data
 
 def parse_omop(path=".\\omop\\20190326", extension='csv'):
+    cwd = os.getcwd()
     os.chdir(path)
     csvs = [i for i in glob.glob('*.{}'.format(extension))]
     # print(csvs)
     patients = {}
     for filename, table in [csv_to_dicts(csv) for csv in csvs]:
         for interaction in table:
-            if interaction['person_id'] in patients:
+            if interaction.get('person_id', False) in patients:
                 if filename in patients[interaction['person_id']]:
                     patients[interaction['person_id']][filename].append(interaction)
                 else:
                     patients[interaction['person_id']][filename] = [interaction, ]
             else:
-                patients[interaction['person_id']] = {filename:[interaction, ]}
+                if 'person_id' in interaction:
+                    patients[interaction['person_id']] = {filename:[interaction, ]}
+                else:
+                    print("found line without patient")
     print("Got {} omop participants".format(len(patients.keys())))
+    os.chdir(cwd)
     return patients, csvs
 
 def main():
