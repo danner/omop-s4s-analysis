@@ -189,8 +189,9 @@ def init_omop_concepts():
 
     CONCEPT_TABLES = [concept_df, cpt4_df, aouppi_df]
     merged_concept_df = concept_df.append([cpt4_df, aouppi_df])
-    merged_concept_df.set_index(['concept_id', 'concept_code', 'vocabulary_id',], inplace=True)
     return merged_concept_df
+
+concept_table = init_omop_concepts()
 
 NO_DATA = 'Empty raw value'
 MISSING_CONCEPT = 'Missing concept'
@@ -251,14 +252,14 @@ def omop_concept_lookup(concept_id):
 def omop_source_concept_code(concept_id):
     concept = omop_concept_lookup(concept_id)
     try:
-        return concept.index.values[0][0]
+        return concept.index.values[0][1]
     except AttributeError:
         return NO_MATCHING_CONCEPT
 
 def omop_concept_vocabulary_id(concept_id):
     concept = omop_concept_lookup(concept_id)
     try:
-        return concept.index.values[0][1]
+        return concept.index.values[0][0]
     except AttributeError:
         return NO_MATCHING_CONCEPT
 
@@ -283,32 +284,33 @@ def concept_code_query(df, system, code):
         print(e)
     return concept
 
+converter = {
+    'http://loinc.org': 'LOINC',
+    'http://snomed.info/sct': 'SNOMED',
+    'http://hl7.org/fhir/sid/icd-9-cm/diagnosis': 'ICD9CM',
+    'http://www.ama-assn.org/go/cpt': 'CPT4',
+    'http://hl7.org/fhir/sid/icd-9-cm': 'ICD9CM',
+    'http://hl7.org/fhir/sid/icd-10-cm': 'ICD10CM',
+    'urn:oid:2.16.840.1.113883.6.90': 'ICD10CM',
+    'urn:oid:2.16.840.1.113883.6.14': 'HCPCS',
+    'http://www.nlm.nih.gov/research/umls/rxnorm': 'RxNorm',
+    'http://hl7.org/fhir/sid/ndc': 'NDC',
+    'http://hl7.org/fhir/ndfrt': 'None',
+    'http://fdasis.nlm.nih.gov': 'None',
+    'http://hl7.org/fhir/sid/cvx': 'CVX',
+    'http://hl7.org/fhir/observation-category': 'Observation Type',
+    'https://apis.followmyhealth.com/fhir/id/translation': 'None',
+    'http://argonautwiki.hl7.org/extension-codes': 'None',
+    'http://hl7.org/fhir/condition-category': 'None',
+    'http://argonaut.hl7.org': 'None',
+    # these are codes for EPIC clients. I need to figure out what the suffix means.
+    'urn:oid:1.2.840.114350.1.13.362.2.7.2.696580': 'None',
+    'urn:oid:1.2.840.114350.1.13.202.2.7.2.696580': 'None',
+    'urn:oid:1.2.840.114350.1.13.71.2.7.2.696580': 'None',
+    'urn:oid:1.2.840.114350.1.13.324.2.7.2.696580': 'None',
+}
+
 def convert_vocabulary(system):
-    converter = {
-        'http://loinc.org': 'LOINC',
-        'http://snomed.info/sct': 'SNOMED',
-        'http://hl7.org/fhir/sid/icd-9-cm/diagnosis': 'ICD9CM',
-        'http://www.ama-assn.org/go/cpt': 'CPT4',
-        'http://hl7.org/fhir/sid/icd-9-cm': 'ICD9CM',
-        'http://hl7.org/fhir/sid/icd-10-cm': 'ICD10CM',
-        'urn:oid:2.16.840.1.113883.6.90': 'ICD10CM',
-        'urn:oid:2.16.840.1.113883.6.14': 'HCPCS',
-        'http://www.nlm.nih.gov/research/umls/rxnorm': 'RxNorm',
-        'http://hl7.org/fhir/sid/ndc': 'NDC',
-        'http://hl7.org/fhir/ndfrt': 'None',
-        'http://fdasis.nlm.nih.gov': 'None',
-        'http://hl7.org/fhir/sid/cvx': 'CVX',
-        'http://hl7.org/fhir/observation-category': 'Observation Type',
-        'https://apis.followmyhealth.com/fhir/id/translation': 'None',
-        'http://argonautwiki.hl7.org/extension-codes': 'None',
-        'http://hl7.org/fhir/condition-category': 'None',
-        'http://argonaut.hl7.org': 'None',
-        # these are codes for EPIC clients. I need to figure out what the suffix means.
-        'urn:oid:1.2.840.114350.1.13.362.2.7.2.696580': 'None',
-        'urn:oid:1.2.840.114350.1.13.202.2.7.2.696580': 'None',
-        'urn:oid:1.2.840.114350.1.13.71.2.7.2.696580': 'None',
-        'urn:oid:1.2.840.114350.1.13.324.2.7.2.696580': 'None',
-    }
     try:
         return converter[system]
     except KeyError:
@@ -412,8 +414,6 @@ def most_common_synonym(coding_sets):
     #print("made a synonym list of length ", len(most_common_synonym.keys()))
     return most_common_synonym
 
-concept_table = init_omop_concepts()
-
 # Report Functions - FHIR
 def fhir_plot_category_counts(fhir_people):
     s4s_datatype_totals = {person:{title:len(items) for (title, items) in datatype.items()} for (person, datatype) in fhir_people.items()}
@@ -442,6 +442,7 @@ def coding_counts(fhir_people):
     coding_paths = {}
     coding_sets = {}
     display_codes = {}
+    concept_table.set_index(['concept_code', 'vocabulary_id',], inplace=True)
     for person, documents in list(fhir_people.items()):
         for document, data in documents.items():
             if document not in coding_paths:
@@ -540,6 +541,7 @@ def omop_system_counts(omop_people):
                 systems[filename] = Counter()
             for incident in incidents:
                 coding = list(omop_concept_to_coding(incident, filename))
+                print(incident, coding)
                 try:
                     systems[filename][coding[0]['system']] += 1
                 except KeyError:
@@ -556,5 +558,6 @@ def omop_coding_counts(omop_people):
             for incident in incidents:
                 coding = omop_raw_coding(incident, filename)
                 standardized_codings[coding] = list(omop_concept_to_coding(incident, filename))
+                print(incident, standardized_codings[coding])
                 codes[filename][coding] += 1
     return codes, standardized_codings
