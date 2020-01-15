@@ -541,7 +541,6 @@ def omop_system_counts(omop_people):
                 systems[filename] = Counter()
             for incident in incidents:
                 coding = list(omop_concept_to_coding(incident, filename))
-                print(incident, coding)
                 try:
                     systems[filename][coding[0]['system']] += 1
                 except KeyError:
@@ -558,6 +557,5 @@ def omop_coding_counts(omop_people):
             for incident in incidents:
                 coding = omop_raw_coding(incident, filename)
                 standardized_codings[coding] = list(omop_concept_to_coding(incident, filename))
-                print(incident, standardized_codings[coding])
                 codes[filename][coding] += 1
     return codes, standardized_codings
