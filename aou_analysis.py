@@ -285,6 +285,7 @@ def concept_code_query(df, system, code):
     return concept
 
 converter = {
+    NO_DATA: NO_DATA,
     'http://loinc.org': 'LOINC',
     'http://snomed.info/sct': 'SNOMED',
     'http://hl7.org/fhir/sid/icd-9-cm/diagnosis': 'ICD9CM',
@@ -304,10 +305,15 @@ converter = {
     'http://hl7.org/fhir/condition-category': 'None',
     'http://argonaut.hl7.org': 'None',
     # these are codes for EPIC clients. I need to figure out what the suffix means.
-    'urn:oid:1.2.840.114350.1.13.362.2.7.2.696580': 'None',
-    'urn:oid:1.2.840.114350.1.13.202.2.7.2.696580': 'None',
     'urn:oid:1.2.840.114350.1.13.71.2.7.2.696580': 'None',
+    'urn:oid:1.2.840.114350.1.13.202.2.7.2.696580': 'None',
     'urn:oid:1.2.840.114350.1.13.324.2.7.2.696580': 'None',
+    'urn:oid:1.2.840.114350.1.13.362.2.7.2.696580': 'None',
+    'urn:oid:1.2.840.114350.1.13.71.2.7.2.657369': 'None',
+    'urn:oid:1.2.840.114350.1.13.202.2.7.2.657369': 'None',
+    'urn:oid:1.2.840.114350.1.13.324.2.7.2.657369': 'None',
+    'urn:oid:1.2.840.114350.1.13.362.2.7.2.657369': 'None',
+    'urn:oid:1.2.840.114350.1.13.232.2.7.2.657369': 'None',
 }
 
 def convert_vocabulary(system):
@@ -457,7 +463,8 @@ def coding_counts(fhir_people):
                             coding = {
                                 'system': f.get('system', NO_DATA),
                                 'code': f.get('code', NO_DATA),
-                                'display': f.get('display', NO_DATA)
+                                'display': f.get('display', NO_DATA),
+                                'document': document,
                             }
                         except AttributeError:
                             #for some reason there are codings that are lists
@@ -465,7 +472,8 @@ def coding_counts(fhir_people):
                             coding = {
                                 'system': f.get('system', NO_DATA),
                                 'code': f.get('code', NO_DATA),
-                                'display': f.get('display', NO_DATA)
+                                'display': f.get('display', NO_DATA),
+                                'document': document,
                             }
 #                         if coding['display'] == NO_DATA:
 #                             coding['display'] = get_fhir_standardized_concept_name(coding)
