@@ -567,3 +567,17 @@ def omop_coding_counts(omop_people):
                 standardized_codings[coding] = list(omop_concept_to_coding(incident, filename))
                 codes[filename][coding] += 1
     return codes, standardized_codings
+
+def compare_per_patient(fhir_patients, omop_patients):
+    fhir_df = pd.DataFrame(fhir_patients)
+    category_sums_df = fhir_df.apply(lambda x: x.apply(lambda y: len(y) if type(y) == type([]) else y))
+    fhir_total_entries = category_sums_df.dropna().apply(lambda x: sum(x))
+    omop_df = pd.DataFrame(omop_patients)
+    category_omop_sums_df = omop_df.apply(lambda x: x.apply(lambda y: len(y) if type(y) == type([]) else y))
+    omop_total_entries = category_omop_sums_df.dropna().apply(lambda x: sum(x))
+    compare_df = pd.DataFrame([fhir_total_entries,omop_total_entries]).transpose()
+    compare_df.rename(columns={0:'FHIR', 1:'OMOP'}, inplace=True)
+    compare_df.sort_values('FHIR', ascending=False, inplace=True)
+    compare_df.index = pd.RangeIndex(len(compare_df))
+    compare_df.index.name = 'Patient'
+    return compare_df
