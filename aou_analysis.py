@@ -524,7 +524,17 @@ def coding_counts(fhir_people):
 def print_synonym_sets(synonyms, display_names):
     for key, value in synonyms.items():
         most_common = display_names[key]['display']
+        system, code = key.split(" ", 1)
+        coding = {
+            'system': system,
+            'code': code,
+        }
+        standardized_name = get_fhir_standardized_concept_name(coding)
         if most_common == 'None':
+            most_common = key
+        elif most_common == NO_DATA and standardized_name != NO_MATCHING_CONCEPT and standardized_name != NO_MATCHING_DISPLAY:
+            most_common = standardized_name
+        else:
             most_common = key
         print(most_common, '=>', [display_names[v]['display'] for v in value])
 
