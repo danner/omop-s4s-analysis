@@ -611,3 +611,33 @@ def compare_per_patient(fhir_patients, omop_patients):
     compare_df.index = pd.RangeIndex(len(compare_df))
     compare_df.index.name = 'Patient'
     return compare_df
+
+def compare_medication_per_patient(fhir_patients, omop_patients):
+    fhir_df = pd.DataFrame(fhir_patients)
+    omop_df = pd.DataFrame(omop_patients)
+
+    fhir_category_counts_df = fhir_df.transpose().apply(lambda x: x.apply(lambda y: len(y) if type(y) == type([]) else y))
+    omop_category_counts_df = omop_df.transpose().apply(lambda x: x.apply(lambda y: len(y) if type(y) == type([]) else y))
+
+    compare_df = fhir_category_counts_df.join(omop_category_counts_df)
+    compare_df['fhir_medication'] = compare_df['MEDICATION_ORDER'] + compare_df['MEDICATION_STATEMENT']
+
+    drug_df = compare_df[['fhir_medication','drug.csv']]
+    drug_df.index.name = 'FHIR Medication <=> OMOP Drug'
+    drug_df.sort_values('fhir_medication', ascending=False, inplace=True)
+    drug_df.index = pd.RangeIndex(len(drug_df))
+    return drug_df
+
+def compare_condition_per_patient(fhir_patients, omop_patients):
+    fhir_df = pd.DataFrame(fhir_patients)
+    omop_df = pd.DataFrame(omop_patients)
+
+    fhir_category_counts_df = fhir_df.transpose().apply(lambda x: x.apply(lambda y: len(y) if type(y) == type([]) else y))
+    omop_category_counts_df = omop_df.transpose().apply(lambda x: x.apply(lambda y: len(y) if type(y) == type([]) else y))
+
+    compare_df = fhir_category_counts_df.join(omop_category_counts_df)
+    condition_df = compare_df[['PROBLEMS','condition.csv']]
+    condition_df.index.name = 'FHIR Problems <=> OMOP Condition'
+    condition_df.sort_values('PROBLEMS', ascending=False, inplace=True)
+    condition_df.index = pd.RangeIndex(len(condition_df))
+    return condition_df
