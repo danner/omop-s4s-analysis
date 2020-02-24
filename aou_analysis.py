@@ -16,6 +16,7 @@ def configure_tables():
     pd.set_option('max_rows', 999)
     pd.set_option('max_colwidth', 120)
     pd.set_option('display.width', 150)
+    pd.options.mode.chained_assignment = None
 
 def merge_multi(self, df, on):
     return self.reset_index().join(df,on=on).set_index(self.index.names)
@@ -532,7 +533,7 @@ def print_synonym_sets(synonyms, display_names):
         standardized_name = get_fhir_standardized_concept_name(coding)
         if most_common == 'None':
             most_common = key
-        elif most_common == NO_DATA and standardized_name != NO_MATCHING_CONCEPT and standardized_name != NO_MATCHING_DISPLAY:
+        if most_common == NO_DATA and standardized_name != NO_MATCHING_CONCEPT and standardized_name != NO_MATCHING_DISPLAY:
             most_common = standardized_name
         else:
             most_common = key
