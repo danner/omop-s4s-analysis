@@ -224,6 +224,43 @@ def get_fhir_standardized_concept_name(fhir_coding):
         if concept == NO_MATCHING_CONCEPT:
             return NO_MATCHING_CONCEPT
 
+def codings_from_bundle(bundle):
+    codings = {
+        'coding_set': set(),
+        'raw_codings': [],
+    }
+    if type(bundle) is not type([]):
+        print(bundle)
+        return bundle
+    for entry in bundle:
+        fetched = fetch_at_path(entry, path_for_resource(entry))
+        resourceType = entry['resourceType']
+        if fetched:
+            raw_codes = []
+            for f in fetched:
+                try:
+                    coding = {
+                        'system': f.get('system', NO_DATA),
+                        'code': f.get('code', NO_DATA),
+                        'display': f.get('display', NO_DATA),
+                        'resourceType': resourceType,
+                    }
+                except AttributeError:
+                    #for some reason there are codings that are lists
+                    f = f[0]
+                    coding = {
+                        'system': f.get('system', NO_DATA),
+                        'code': f.get('code', NO_DATA),
+                        'display': f.get('display', NO_DATA),
+                        'resourceType': resourceType,
+                    }
+                if coding['display'] == NO_DATA:
+                    coding['display'] = get_fhir_standardized_concept_name(coding)
+                coding['code_hash'] = coding['system']+' '+coding['code']
+                codings['coding_set'].add(coding['code_hash'])
+                raw_codes.append(coding)
+            codings['raw_codings'].append(raw_codes)
+    return codings
 
 class Memoize:
     def __init__(self, fn):
@@ -349,6 +386,19 @@ def omop_concept_to_coding(row, table):
     except AttributeError as e:
         #print("no concept for ", row, table)
         return ({}, {})
+
+def omop_entries_to_codings(category, bundle):
+    codings = {
+        'coding_set': set(),
+        'raw_codings': [],
+        'standardized_codings': [],
+    }
+    for row in bundle:
+        raw_codes = omop_raw_coding(row, category)
+        codings['raw_codings'].append(raw_codes)
+        codings['standardized_codings'].append(omop_concept_to_coding(row, category))
+        codings['coding_set'].add(raw_codes)
+    return codings
 
 def compose_vocab_df(vocab):
     vocab_df = pd.DataFrame(vocab).transpose()
